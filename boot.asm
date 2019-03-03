@@ -1,90 +1,47 @@
-;=====================================
-; nasmw boot.asm -f bin -o boot.bin
+;==========================================
+; nasmw boot.asm -o boot.bin
 ; partcopy boot.bin 0 200 -f0
  
 [ORG 0x7c00]      ; add to offsets
-   xor ax, ax    ; make it zero
+ 
+start:   xor ax, ax   ; make it zero
    mov ds, ax   ; DS=0
    mov ss, ax   ; stack starts at 0
    mov sp, 0x9c00   ; 2000h past code start
  
-   cld
+   cli      ; no interrupt
+   push ds      ; save real mode
  
-   mov ax, 0xb800   ; text video memory
-   mov es, ax
+   lgdt [gdtinfo]   ; load gdt register
  
-   mov si, msg   ; show text string
-   call sprint
+   mov  eax, cr0   ; switch to pmode by
+   or al,1         ; set pmode bit
+   mov  cr0, eax
  
-   mov ax, 0xb800   ; look at video mem
-   mov gs, ax
-   mov bx, 0x0000   ; 'W'=57 attrib=0F
-   mov ax, [gs:bx]
+   mov  bx, 0x08   ; select descriptor 1
+   mov  ds, bx   ; 8h = 1000b
  
-   mov  word [reg16], ax ;look at register
-   call printreg16
+   and al,0xFE     ; back to realmode
+   mov  cr0, eax   ; by toggling bit again
  
-hang:
-   jmp hang
+   pop ds      ; get back old segment
+   sti
  
-;----------------------
-dochar:   call cprint         ; print one character
-sprint:   lodsb      ; string char to AL
-   cmp al, 0
-   jne dochar   ; else, we're done
-   add byte [ypos], 1   ;down one row
-   mov byte [xpos], 0   ;back to left
-   ret
+   mov bx, 0x0f01   ; attrib/char of smiley
+   mov eax, 0x0b8000 ; note 32 bit offset
+   mov word [ds:eax], bx
  
-cprint:   mov ah, 0x0F   ; attrib = white on black
-   mov cx, ax    ; save char/attribute
-   movzx ax, byte [ypos]
-   mov dx, 160   ; 2 bytes (char/attrib)
-   mul dx      ; for 80 columns
-   movzx bx, byte [xpos]
-   shl bx, 1    ; times 2 to skip attrib
+   jmp $      ; loop forever
  
-   mov di, 0        ; start of video memory
-   add di, ax      ; add y offset
-   add di, bx      ; add x offset
+gdtinfo:
+   dw gdt_end - gdt - 1   ;last byte in table
+   dd gdt         ;start of table
  
-   mov ax, cx        ; restore char/attribute
-   stosw              ; write char/attribute
-   add byte [xpos], 1  ; advance to right
+gdt        dd 0,0  ; entry 0 is always unused
+flatdesc    db 0xff, 0xff, 0, 0, 0, 10010010b, 11001111b, 0
+gdt_end:
  
-   ret
- 
-;------------------------------------
- 
-printreg16:
-   mov di, outstr16
-   mov ax, [reg16]
-   mov si, hexstr
-   mov cx, 4   ;four places
-hexloop:
-   rol ax, 4   ;leftmost will
-   mov bx, ax   ; become
-   and bx, 0x0f   ; rightmost
-   mov bl, [si + bx];index into hexstr
-   mov [di], bl
-   inc di
-   dec cx
-   jnz hexloop
- 
-   mov si, outstr16
-   call sprint
- 
-   ret
- 
-;------------------------------------
- 
-xpos   db 0
-ypos   db 0
-hexstr   db '0123456789ABCDEF'
-outstr16   db '0000', 0  ;register value string
-reg16   dw    0  ; pass values to printreg16
-msg   db "What are you doing, Dave?", 0
-times 510-($-$$) db 0
-db 0x55
-db 0xAA
-;==================================
+   times 510-($-$$) db 0  ; fill sector w/ 0's
+   db 0x55          ; req'd by some BIOSes
+   db 0xAA
+;==========================================
