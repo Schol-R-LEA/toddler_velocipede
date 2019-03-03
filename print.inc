@@ -1,61 +1,63 @@
-;==========================================
-; print.inc
-
 ;----------------------
-dochar:   call cprint         ; print one character
-
-sprint:   lodsb      ; string char to AL
-   cmp al, 0
-   jne dochar   ; else, we're done
-   add byte [ypos], 1   ;down one row
-   mov byte [xpos], 0   ;back to left
-   ret
+dochar:
+    call cprint              ; print one character
+sprint:
+    mov eax, [esi]          ; string char to AL
+    lea esi, [esi+1]
+    cmp al, 0
+    jne dochar               ; else, we're done
+    add byte [ypos], 1       ; down one row
+    mov byte [xpos], 0       ; back to left
+    ret
  
-cprint:   mov ah, 0x0F   ; attrib = white on black
-   mov cx, ax    ; save char/attribute
-   movzx ax, byte [ypos]
-   mov dx, 160   ; 2 bytes (char/attrib)
-   mul dx      ; for 80 columns
-   movzx bx, byte [xpos]
-   shl bx, 1    ; times 2 to skip attrib
+cprint:
+    mov ah, 0x0F             ; attrib = white on black
+    mov ecx, eax             ; save char/attribute
+    movzx eax, byte [ypos]
+    mov edx, 160             ; 2 bytes (char/attrib)
+    mul edx                  ; for 80 columns
+    movzx ebx, byte [xpos]
+    shl ebx, 1               ; times 2 to skip attrib
  
-   mov di, 0        ; start of video memory
-   add di, ax      ; add y offset
-   add di, bx      ; add x offset
+    mov edi, 0xb8000         ; start of video memory
+    add edi, eax             ; add y offset
+    add edi, ebx             ; add x offset
  
-   mov ax, cx        ; restore char/attribute
-   stosw              ; write char/attribute
-   add byte [xpos], 1  ; advance to right
+    mov eax, ecx             ; restore char/attribute
+    mov word [ds:edi], ax
+    add byte [xpos], 1       ; advance to right
  
-   ret
+    ret
  
 ;------------------------------------
  
-printreg16:
-   mov di, outstr16
-   mov ax, [reg16]
-   mov si, hexstr
-   mov cx, 4   ;four places
+printreg32:
+    mov edi, outstr32
+    mov eax, [reg32]
+    mov esi, hexstr
+    mov ecx, 8               ; eight nibbles
+ 
 hexloop:
-   rol ax, 4   ;leftmost will
-   mov bx, ax   ; become
-   and bx, 0x0f   ; rightmost
-   mov bl, [si + bx];index into hexstr
-   mov [di], bl
-   inc di
-   dec cx
-   jnz hexloop
+    rol eax, 4               ; leftmost will
+    mov ebx, eax             ; become rightmost
+    and ebx, 0x0f ;
+    mov bl, [esi + ebx]      ; index into hexstr
+    mov [edi], bl
+    inc edi
+    dec ecx
+    jnz hexloop
  
-   mov si, outstr16
-   call sprint
+    mov esi, outstr32
+    call sprint
  
-   ret
-
+    ret
+ 
 ;------------------------------------
  
-xpos   db 0
-ypos   db 0
-hexstr   db '0123456789ABCDEF'
-outstr16   db '0000', 0  ;register value string
-reg16   dw    0  ; pass values to printreg16
-
+xpos db 0
+ypos db 0
+hexstr db '0123456789ABCDEF'
+outstr32 db '00000000', 0    ; register value
+reg32 dd 0                   ; pass values to printreg32
+ 
+;------------------------------------
